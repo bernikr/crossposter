@@ -6,6 +6,8 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "atproto>=0.0.61",
+    "dotenv>=0.9.9",
+    "mastodon-py>=2.0.1",
 ]
 
 [tool.ruff]
@@ -22,6 +24,8 @@ ignore = [
 
 [dependency-groups]
 dev = [
+    "gitpython>=3.1.45",
     "pre-commit>=4.2.0",
     "ruff>=0.12.7",
+    "semver>=3.0.4",
 ]
