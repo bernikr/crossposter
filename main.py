@@ -3,10 +3,7 @@ import os
 import time
 
 from atproto import Client
-from dotenv import load_dotenv
 from mastodon import Mastodon
-
-load_dotenv()
 
 BSKY_USERNAME = os.getenv("BSKY_USERNAME", "")
 BSKY_PASSWORD = os.getenv("BSKY_PASSWORD", "")
