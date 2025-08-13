@@ -18,13 +18,16 @@ select = ["ALL"]
 ignore = [
     "D",      # pydocstyle
     "CPY",    # flake8-copyright
-    "PGH003", # Use specific error codes when using noqa
 ]
 
 [dependency-groups]
 dev = [
     "gitpython>=3.1.45",
+    "mypy>=1.17.1",
     "pre-commit>=4.2.0",
     "ruff>=0.12.7",
     "semver>=3.0.4",
 ]
+
+[tool.mypy]
+strict = true

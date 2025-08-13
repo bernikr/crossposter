@@ -2,7 +2,7 @@ import logging
 import os
 import time
 
-from atproto import Client
+from atproto import Client  # type: ignore[import-untyped]
 from mastodon import Mastodon
 
 BSKY_USERNAME = os.getenv("BSKY_USERNAME", "")
