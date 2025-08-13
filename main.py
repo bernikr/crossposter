@@ -22,26 +22,31 @@ logger = logging.getLogger(__name__)
 def bsky_repost() -> None:
     bsky = Client()
     bsky.login(BSKY_USERNAME, BSKY_PASSWORD)
+    if bsky.me is None:
+        logger.error("Failed to log in to Bluesky. Check your credentials.")
+        return
+    me = bsky.me.did
     for source_account in BSKY_SOURCE_ACCOUNTS:
         feed = bsky.get_author_feed(source_account)
         for post in feed.feed:
             if post.post.viewer and post.post.viewer.repost:
-                continue
+                continue  # Already reposted
+            if post.post.author.did == me:
+                continue  # Skip own posts
             bsky.repost(post.post.uri, post.post.cid)
             logger.info("Reposted bsky post %s", post.post.cid)
 
 
 def mastodon_repost() -> None:
     mastodon = Mastodon(access_token=MASTODON_ACCESS_TOKEN, api_base_url=MASTODON_SERVER)
-    me = mastodon.me()
     for source_account in MASTODON_SOURCE_ACCOUNTS:
         account = mastodon.account_lookup(source_account)
         feed = mastodon.account_statuses(account)
         for post in feed:
-            if post.reblog and post.reblog.account.id == me.id:
-                continue
+            if post.reblog:
+                continue  # Skip reblogs
             if post.reblogged:
-                continue
+                continue  # Already reposted
             mastodon.status_reblog(post.id)
             logger.info("Reposted mastodon post %s", post.id)
 
