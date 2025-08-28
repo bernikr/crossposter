@@ -15,6 +15,8 @@ MASTODON_SOURCE_ACCOUNTS = os.getenv("MASTODON_SOURCE_ACCOUNTS", "").split(",")
 
 SLEEP_TIME = int(os.getenv("SLEEP_TIME", "60"))
 
+VERSION = os.getenv("VERSION", "dev")
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -52,6 +54,8 @@ def mastodon_repost() -> None:
 
 
 if __name__ == "__main__":
+    logger.info("Starting up...")
+    logger.info("Version %s", VERSION)
     while True:
         logger.info("Searching for new posts...")
         bsky_repost()

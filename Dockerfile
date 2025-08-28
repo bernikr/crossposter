@@ -26,4 +26,6 @@ SHELL ["sh", "-exc"]
 COPY --from=builder --chown=app:app /app /app
 ENV PATH="/app/bin:$PATH"
 
+ARG VERSION
+ENV VERSION=${VERSION:-"unspecified"}
 CMD ["python", "-m", "main"]
