@@ -147,7 +147,7 @@ wheels = [
 [[package]]
 name = "crossposter"
 version = "1.0.1"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "atproto" },
     { name = "mastodon-py" },
