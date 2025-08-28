@@ -1,5 +1,4 @@
 # See https://pre-commit.com for more information
-# See https://pre-commit.com/hooks.html for more hooks
 # Use `pre-commit install -t commit-msg -t pre-commit` to install the hooks
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -30,6 +29,3 @@ repos:
           - --contrib=CT1
           - --ignore=B6
           - --msg-filename
-ci:
-  skip:
-    - mypy
