@@ -1,4 +1,4 @@
-FROM ghcr.io/astral-sh/uv:python3.13-alpine AS builder
+FROM ghcr.io/astral-sh/uv:python3.13-alpine AS env-builder
 SHELL ["sh", "-exc"]
 
 ENV UV_COMPILE_BYTECODE=1 \ 
@@ -15,15 +15,16 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     uv sync --locked --no-install-project --no-dev
 
-COPY . /src
-WORKDIR /src
+FROM env-builder AS app-builder
+
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-dev --no-editable
+    --mount=type=bind,source=.,target=/src,rw  \
+    uv sync --locked --no-dev --no-editable --directory /src
 
 FROM python:3.13-alpine
-SHELL ["sh", "-exc"]
 
-COPY --from=builder --chown=app:app /app /app
+COPY --from=env-builder --chown=app:app /app /app
+COPY --from=app-builder --chown=app:app /app /app
 ENV PATH="/app/bin:$PATH"
 
 ARG VERSION
