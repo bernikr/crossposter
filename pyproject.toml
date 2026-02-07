@@ -4,18 +4,15 @@ version = "1.0.2"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = [
-    "atproto>=0.0.61",
-    "mastodon-py>=2.0.1",
-]
+dependencies = ["atproto>=0.0.61", "mastodon-py>=2.0.1"]
 
 [dependency-groups]
 dev = [
-    "gitpython>=3.1.45",
-    "mypy>=1.17.1",
-    "pre-commit>=4.2.0",
-    "ruff>=0.12.7",
-    "semver>=3.0.4",
+  "gitpython>=3.1.45",
+  "mypy>=1.17.1",
+  "prek>=0.3.2",
+  "ruff>=0.12.7",
+  "semver>=3.0.4",
 ]
 
 [tool.uv]
@@ -28,8 +25,8 @@ line-length = 120
 preview = true
 select = ["ALL"]
 ignore = [
-    "D",      # pydocstyle
-    "CPY",    # flake8-copyright
+  "D",   # pydocstyle
+  "CPY", # flake8-copyright
 ]
 
 
