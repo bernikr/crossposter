@@ -57,8 +57,11 @@ if __name__ == "__main__":
     logger.info("Starting up...")
     logger.info("Version %s", VERSION)
     while True:
-        logger.info("Searching for new posts...")
-        bsky_repost()
-        mastodon_repost()
+        try:
+            logger.info("Searching for new posts...")
+            bsky_repost()
+            mastodon_repost()
+        except Exception:
+            logger.exception("Something went wrong")
         logger.info("Sleeping for %i seconds...", SLEEP_TIME)
         time.sleep(SLEEP_TIME)
