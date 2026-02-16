@@ -14,12 +14,11 @@ on:
           - major # 1.0.0 -> 2.0.0
           - beta # 1.0.0 -> 1.0.1-beta.1 OR 1.0.1-beta.1 -> 1.0.1-beta.2
 
-permissions:
-  contents: write
-
 jobs:
   bump-and-release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
       new_tag: ${{ steps.calc.outputs.new_tag }}
       new_version: ${{ steps.calc.outputs.new_version }}
@@ -134,5 +133,10 @@ jobs:
   call-build:
     needs: bump-and-release
     uses: ./.github/workflows/docker-image.yml
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
     with:
       version: ${{ needs.bump-and-release.outputs.new_tag }}
