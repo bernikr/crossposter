@@ -114,7 +114,7 @@ jobs:
           sed -i "s/^version = \".*\"/version = \"$NEW_VERSION\"/" pyproject.toml
 
           # B. Update README.md
-          sed -i "s/ghcr.io\/bernikr\/crossposter:([0-9]+)\.([0-9]+)\.([0-9]+)(-beta\.([0-9]+))?\+/ghcr.io\/bernikr\/crossposter:$NEW_VERSION/g" README.md
+          sed -E -i "s/ghcr.io\/bernikr\/crossposter:[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?/ghcr.io\/bernikr\/crossposter:$NEW_VERSION/g" README.md
 
           # C. Update uv.lock
           uv lock
