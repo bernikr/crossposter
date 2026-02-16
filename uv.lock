@@ -169,7 +169,7 @@ wheels = [
 
 [[package]]
 name = "crossposter"
-version = "1.0.7b1"
+version = "1.0.7"
 source = { editable = "." }
 dependencies = [
     { name = "atproto" },
