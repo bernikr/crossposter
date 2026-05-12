@@ -237,15 +237,15 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "atproto", specifier = ">=0.0.65" },
-    { name = "mastodon-py", specifier = ">=2.1.4" },
+    { name = "mastodon-py", specifier = ">=2.2.1" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "gitpython", specifier = ">=3.1.46" },
-    { name = "mypy", specifier = ">=1.19.1" },
-    { name = "prek", specifier = ">=0.3.3" },
-    { name = "ruff", specifier = ">=0.15.1" },
+    { name = "gitpython", specifier = ">=3.1.50" },
+    { name = "mypy", specifier = ">=2.1.0" },
+    { name = "prek", specifier = ">=0.3.13" },
+    { name = "ruff", specifier = ">=0.15.12" },
     { name = "semver", specifier = ">=3.0.4" },
 ]
 
