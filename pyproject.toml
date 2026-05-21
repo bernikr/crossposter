@@ -10,8 +10,8 @@ dependencies = ["atproto>=0.0.65", "mastodon-py>=2.2.1"]
 dev = [
   "gitpython>=3.1.50",
   "mypy>=2.1.0",
-  "prek>=0.3.13",
-  "ruff>=0.15.12",
+  "prek>=0.4.1",
+  "ruff>=0.15.14",
   "semver>=3.0.4",
 ]
 
