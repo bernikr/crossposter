@@ -32,5 +32,6 @@ ENV PATH="/venv/bin:$PATH" \
 ARG VERSION
 ENV VERSION=${VERSION:-"unspecified"}
 USER 65532:65532
-# TODO: Add a healthcheck
+ENV HEALTHCHECK_FILE=/tmp/health
+HEALTHCHECK --start-period=30s CMD ["python", "-c", "import os, sys, time; p = os.getenv('HEALTHCHECK_FILE'); t = int(os.getenv('SLEEP_TIME', '60')); sys.exit(0 if os.path.isfile(p) and (time.time() - os.path.getmtime(p) <= t*2) else 1)"]
 CMD ["python", "-m", "main"]

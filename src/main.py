@@ -5,6 +5,7 @@
 import logging
 import os
 import time
+from pathlib import Path
 
 from atproto import Client  # type: ignore[import-untyped]
 from mastodon import Mastodon
@@ -20,6 +21,7 @@ MASTODON_SOURCE_ACCOUNTS = os.getenv("MASTODON_SOURCE_ACCOUNTS", "").split(",")
 SLEEP_TIME = int(os.getenv("SLEEP_TIME", "60"))
 
 VERSION = os.getenv("VERSION", "dev")
+HEALTHCHECK_FILE: Path | None = Path(os.environ["HEALTHCHECK_FILE"]) if "HEALTHCHECK_FILE" in os.environ else None
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -61,6 +63,8 @@ if __name__ == "__main__":
     logger.info("Starting up...")
     logger.info("Version %s", VERSION)
     while True:
+        if HEALTHCHECK_FILE is not None:
+            HEALTHCHECK_FILE.write_text(str(time.time()))
         try:
             logger.info("Searching for new posts...")
             bsky_repost()
