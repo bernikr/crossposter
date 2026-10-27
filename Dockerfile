@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
-FROM ghcr.io/astral-sh/uv:trixie-slim AS builder
+FROM ghcr.io/astral-sh/uv:trixie AS builder
 SHELL ["sh", "-exc"]
 WORKDIR /src
 
