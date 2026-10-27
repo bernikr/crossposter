@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2025 bernikr <hi@berni.kr>
+
+SPDX-License-Identifier: MIT
+-->
+
 # Crossposter
 
 A simple Python script that reblogs/retoots posts on mastodon and bluesky.
