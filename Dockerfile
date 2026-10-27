@@ -1,32 +1,32 @@
-FROM ghcr.io/astral-sh/uv:python3.13-alpine AS env-builder
+FROM ghcr.io/astral-sh/uv:trixie-slim AS builder
 SHELL ["sh", "-exc"]
+WORKDIR /src
 
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
-    UV_PYTHON_DOWNLOADS=0 \
-    UV_PROJECT_ENVIRONMENT=/app
-
-RUN --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=bind,source=.python-version,target=.python-version \
-    uv venv /app
+    UV_NO_DEV=1 \
+    UV_PYTHON_PREFERENCE=only-managed \
+    UV_PYTHON_INSTALL_DIR=/python \
+    UV_PROJECT_ENVIRONMENT=/venv \
+    UV_PREVIEW_FEATURES=frozen-lockfile
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
-    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    uv sync --locked --no-install-project --no-dev
+    uv sync --frozen --no-install-project
 
-FROM env-builder AS app-builder
-
+COPY . /src
 RUN --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=bind,source=.,target=/src,rw  \
-    uv sync --locked --no-dev --no-editable --directory /src
+    uv sync --locked --no-editable
 
-FROM python:3.13-alpine
+FROM gcr.io/distroless/cc-debian13:latest AS runtime
 
-COPY --from=env-builder --chown=app:app /app /app
-COPY --from=app-builder --chown=app:app /app /app
-ENV PATH="/app/bin:$PATH"
+COPY --from=builder /python /python
+COPY --from=builder /venv /venv
+ENV PATH="/venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1
 
 ARG VERSION
 ENV VERSION=${VERSION:-"unspecified"}
+USER 65532:65532
+# TODO: Add a healthcheck
 CMD ["python", "-m", "main"]
