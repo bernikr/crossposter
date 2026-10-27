@@ -22,7 +22,7 @@ That way people just have to follow one of my accounts to see most of my activit
 ```yaml
 services:
   crossposter:
-    image: ghcr.io/bernikr/crossposter:1.0.7
+    image: ghcr.io/bernikr/crossposter:1.1.0
     environment:
         BSKY_USERNAME: <username to login to bsky>
         BSKY_PASSWORD: <(app)password to login to bsky>
