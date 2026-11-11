@@ -116,11 +116,11 @@ jobs:
           echo "Updating version to $NEW_VERSION..."
 
           # A. Update pyproject.toml
-          sed -i "s/^version = \".*\"/version = \"$NEW_VERSION\"/" pyproject.toml
+          sed -i "s/version = \".*\"/version = \"$NEW_VERSION\"/" pyproject.toml
 
           # B. Update README.md
-          sed -E -i "s/ghcr.io\/bernikr\/crossposter:[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?/ghcr.io\/bernikr\/crossposter:$NEW_VERSION/g" README.md
-
+          sed -E -i.bak "s|(ghcr\.io/bernikr/crossposter):[A-Za-z0-9._-]+|\1:${NEW_VERSION:?NEW_VERSION not set}|g" README.md
+          
           # C. Update uv.lock
           uv lock
 
