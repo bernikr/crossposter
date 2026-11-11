@@ -47,7 +47,18 @@ jobs:
         id: calc
         shell: bash
         run: |
-          # 1. Find the latest tag. Default to v0.0.0 if none exists.
+          set -euo pipefail
+
+          # 1. Read the version currently declared in pyproject.toml. It is the
+          #    source of truth for the files on main, so the calculated version
+          #    must never be lower than it.
+          CURRENT_VERSION=$(sed -n 's/^version = "\(.*\)"$/\1/p' pyproject.toml | head -n 1)
+          if [ -z "$CURRENT_VERSION" ]; then
+            echo "Error: could not read version from pyproject.toml"
+            exit 1
+          fi
+
+          # 2. Find the latest tag. Default to v0.0.0 if none exists.
           git config versionsort.suffix "-beta"
           LAST_TAG=$(git tag --sort=-v:refname | head -n 1)
           if [ -z "$LAST_TAG" ]; then LAST_TAG="v0.0.0"; fi
@@ -55,7 +66,7 @@ jobs:
           # Remove 'v'
           VERSION=${LAST_TAG#v}
 
-          # 2. Parse Version using Regex
+          # 3. Parse Version using Regex
           # Groups: 1=Major, 2=Minor, 3=Patch, 4=Suffix(-beta.x), 5=BetaNum
           REGEX="^([0-9]+)\.([0-9]+)\.([0-9]+)(-beta\.([0-9]+))?$"
 
@@ -70,10 +81,16 @@ jobs:
             exit 1
           fi
 
-          echo "Current: $MAJOR.$MINOR.$PATCH (Beta: ${BETA_NUM:-0})"
+          if [[ ! $CURRENT_VERSION =~ $REGEX ]]; then
+            echo "Error: Version $CURRENT_VERSION in pyproject.toml does not match semver format"
+            exit 1
+          fi
+
+          echo "Latest tag: $LAST_TAG"
+          echo "Current project version: $CURRENT_VERSION"
           INPUT_TYPE="${{ inputs.bump_type }}"
 
-          # 3. Calculate New Version
+          # 4. Calculate the candidate next version from the latest tag.
           if [ "$INPUT_TYPE" == "major" ]; then
             MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0; SUFFIX=""
 
@@ -101,39 +118,82 @@ jobs:
             fi
           fi
 
-          NEW_VERSION="$MAJOR.$MINOR.$PATCH$SUFFIX"
+          CANDIDATE_VERSION="$MAJOR.$MINOR.$PATCH$SUFFIX"
+
+          # 5. Never downgrade the version already declared in pyproject.toml.
+          #    A PR may already have bumped the version (for example to 1.2.0
+          #    while the latest tag is still v1.1.0). In that case the version
+          #    is simply tagged as-is instead of replacing it with an older one.
+          version_key() { printf '%s' "${1/-beta./~beta.}"; }
+
+          if [ "$CURRENT_VERSION" = "$CANDIDATE_VERSION" ] || \
+            [ "$(printf '%s\n%s\n' "$(version_key "$CURRENT_VERSION")" "$(version_key "$CANDIDATE_VERSION")" | sort -V | tail -n 1)" = "$(version_key "$CURRENT_VERSION")" ]; then
+            NEW_VERSION="$CURRENT_VERSION"
+          else
+            NEW_VERSION="$CANDIDATE_VERSION"
+          fi
+
           NEW_TAG="v$NEW_VERSION"
 
           echo "Next Version: $NEW_VERSION"
+          if [ "$NEW_VERSION" = "$CURRENT_VERSION" ]; then
+            echo "pyproject.toml already declares $NEW_VERSION; releasing it as-is."
+          fi
 
-          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
+          echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "new_tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
 
       - name: Update Files
         run: |
+          set -euo pipefail
+
           NEW_VERSION="${{ steps.calc.outputs.new_version }}"
 
           echo "Updating version to $NEW_VERSION..."
 
-          # A. Update pyproject.toml
-          sed -i "s/version = \".*\"/version = \"$NEW_VERSION\"/" pyproject.toml
+          # A. Update the project version in pyproject.toml (first match only,
+          #    so unrelated `version = "..."` entries are left alone).
+          sed -i -E "0,/^version = \".*\"$/s//version = \"$NEW_VERSION\"/" pyproject.toml
+          grep -q "^version = \"$NEW_VERSION\"$" pyproject.toml || {
+            echo "Error: failed to update version in pyproject.toml"
+            exit 1
+          }
 
           # B. Update README.md
-          sed -E -i.bak "s|(ghcr\.io/bernikr/crossposter):[A-Za-z0-9._-]+|\1:${NEW_VERSION:?NEW_VERSION not set}|g" README.md
-          
+          sed -E -i "s|(ghcr\.io/bernikr/crossposter):[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?|\1:$NEW_VERSION|g" README.md
+          grep -q "ghcr.io/bernikr/crossposter:$NEW_VERSION" README.md || {
+            echo "Error: failed to update image version in README.md"
+            exit 1
+          }
+
           # C. Update uv.lock
           uv lock
 
       - name: Commit, Tag, and Push
         run: |
+          set -euo pipefail
+
+          NEW_VERSION="${{ steps.calc.outputs.new_version }}"
+          NEW_TAG="${{ steps.calc.outputs.new_tag }}"
+
+          if git rev-parse -q --verify "refs/tags/$NEW_TAG" >/dev/null; then
+            echo "Error: tag $NEW_TAG already exists"
+            exit 1
+          fi
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           git add pyproject.toml uv.lock README.md
-          git commit -m "chore(release): bump version to ${{ steps.calc.outputs.new_version }}"
-          git push origin main
-          git tag ${{ steps.calc.outputs.new_tag }}
-          git push origin ${{ steps.calc.outputs.new_tag }}
+          if git diff --cached --quiet; then
+            echo "Version files already contain $NEW_VERSION; nothing to commit."
+          else
+            git commit -m "chore(release): bump version to $NEW_VERSION"
+            git push origin main
+          fi
+
+          git tag "$NEW_TAG"
+          git push origin "$NEW_TAG"
 
   call-build:
     needs: bump-and-release
