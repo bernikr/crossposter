@@ -10,14 +10,21 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, Protocol
 
+import httpx
 from atproto import Client  # type: ignore[import-untyped]
 from atproto_client.exceptions import (  # type: ignore[import-untyped]
     BadRequestError,
     LoginRequiredError,
+    NetworkError,
     RateLimitExceededError,
     UnauthorizedError,
 )
-from mastodon import Mastodon
+from atproto_client.request import Request  # type: ignore[import-untyped]
+from mastodon import (
+    Mastodon,
+    MastodonNetworkError,
+    MastodonServerError,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -27,8 +34,21 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_SLEEP_TIME: Final = 60
 DEFAULT_HEALTHCHECK_MAX_FAILURES: Final = 3
+DEFAULT_RETRY_COUNT: Final = 1
+DEFAULT_RETRY_DELAY: Final = 5
+DEFAULT_BLUESKY_TIMEOUT: Final = 25.0
 RATE_LIMIT_BASE_DELAY: Final = 60.0
 RATE_LIMIT_MAX_DELAY: Final = 3600.0
+
+# Failures worth a second attempt within the same cycle. atproto wraps httpx timeouts and
+# connection failures in NetworkError; protocol errors (for example a truncated response) are
+# not wrapped, so the httpx transport base class is included as well.
+TRANSIENT_ERRORS: Final = (
+    NetworkError,
+    httpx.TransportError,
+    MastodonNetworkError,
+    MastodonServerError,
+)
 
 # ATProto PDSs report rejected tokens either as HTTP 401/403 or as a 400 with one of these error codes.
 SESSION_ERROR_CODES: Final = frozenset(
@@ -81,6 +101,10 @@ def _retry_after(error: BaseException) -> float | None:
     return None
 
 
+def _is_transient(error: BaseException) -> bool:
+    return isinstance(error, TRANSIENT_ERRORS)
+
+
 def _is_session_rejected(error: BaseException) -> bool:
     if isinstance(error, (LoginRequiredError, UnauthorizedError)):
         return True
@@ -104,6 +128,8 @@ class Config:
     session_file: Path | None
     healthcheck_file: Path | None
     healthcheck_max_failures: int
+    retry_count: int
+    retry_delay: int
     version: str
 
     @classmethod
@@ -119,6 +145,8 @@ class Config:
             session_file=_env_optional_path("SESSION_FILE"),
             healthcheck_file=_env_optional_path("HEALTHCHECK_FILE"),
             healthcheck_max_failures=_env_int("HEALTHCHECK_MAX_FAILURES", DEFAULT_HEALTHCHECK_MAX_FAILURES),
+            retry_count=max(0, _env_int("RETRY_COUNT", DEFAULT_RETRY_COUNT)),
+            retry_delay=max(0, _env_int("RETRY_DELAY", DEFAULT_RETRY_DELAY)),
             version=os.getenv("VERSION", "dev"),
         )
 
@@ -157,12 +185,21 @@ class Backoff:
         return delay
 
 
+def _create_bluesky_client() -> Client:
+    """Create an ATProto client with an explicit timeout instead of httpx's 5 second default.
+
+    Returns:
+        Client: A client whose requests time out after ``DEFAULT_BLUESKY_TIMEOUT`` seconds.
+    """
+    return Client(request=Request(timeout=httpx.Timeout(DEFAULT_BLUESKY_TIMEOUT)))
+
+
 class BlueskyClient:
     """Bluesky client that keeps and persists a single ATProto session."""
 
     def __init__(self, config: Config, client: Client | None = None) -> None:
         self._config = config
-        self._client: Client = client if client is not None else Client()
+        self._client: Client = client if client is not None else _create_bluesky_client()
         self._has_session = False
         self._client.on_session_change(self._on_session_change)
 
@@ -302,12 +339,33 @@ class Crossposter:
         bsky: BskyReposter | None = None,
         mastodon: MastodonReposter | None = None,
         clock: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self._config = config
         self._bsky = bsky if bsky is not None else BlueskyClient(config)
         self._mastodon = mastodon if mastodon is not None else MastodonClient(config)
         self._backoff = Backoff()
         self._clock = clock
+        self._sleep = sleep
+
+    def _run_once_with_retry(self, name: str, run_once: Callable[[], None]) -> None:
+        attempts = self._config.retry_count + 1
+        for attempt in range(1, attempts + 1):
+            try:
+                run_once()
+            except Exception as error:
+                if not _is_transient(error) or attempt == attempts:
+                    raise
+                logger.warning(
+                    "%s attempt %d failed with a transient error (%s); retrying in %d seconds",
+                    name,
+                    attempt,
+                    error,
+                    self._config.retry_delay,
+                )
+                self._sleep(self._config.retry_delay)
+            else:
+                return
 
     def run_cycle(self) -> bool:
         healthy = True
@@ -315,7 +373,7 @@ class Crossposter:
 
         if self._backoff.ready(now):
             try:
-                self._bsky.run_once()
+                self._run_once_with_retry("Bluesky", self._bsky.run_once)
             except RateLimitExceededError as error:
                 delay = self._backoff.defer(now, _retry_after(error))
                 logger.warning("Bluesky rate limit exceeded; pausing Bluesky for %.0f seconds", delay)
@@ -330,7 +388,7 @@ class Crossposter:
             healthy = False
 
         try:
-            self._mastodon.run_once()
+            self._run_once_with_retry("Mastodon", self._mastodon.run_once)
         except Exception:
             logger.exception("Mastodon cycle failed")
             healthy = False

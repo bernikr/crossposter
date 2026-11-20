@@ -31,9 +31,17 @@ services:
         MASTODON_ACCESS_TOKEN: <access token to login to mastodon>
         MASTODON_SOURCE_ACCOUNTS: <comma-separated list of accounts to search for posts on mastodon>
         SLEEP_TIME: <time to sleep between searches> (default: 60)
+        RETRY_COUNT: <retries per direction after a transient network error> (default: 1)
+        RETRY_DELAY: <seconds to wait before retrying a transient network error> (default: 5)
         SESSION_FILE: <optional path to persist the bsky session, e.g. /data/bsky-session>
         HEALTHCHECK_MAX_FAILURES: <number of consecutive failed cycles tolerated before unhealthy> (default: 3)
 ```
+
+The Bluesky client uses an explicit 25 second timeout instead of httpx's 5 second default, so a stalled PDS
+does not fail a cycle before it can answer. Timeouts, connection failures and protocol errors in either
+direction are retried `RETRY_COUNT` times after `RETRY_DELAY` seconds before the cycle counts as failed. Rate
+limit responses still use the hourly exponential backoff, and rejected sessions still trigger a fresh login
+instead of a retry.
 
 `SESSION_FILE` is optional. When it is unset the Bluesky session is kept in memory only, so a container
 recreation requires a new login. When it is set, the session is written atomically (mode `0600`) and reused on

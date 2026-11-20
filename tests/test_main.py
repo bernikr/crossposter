@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 from atproto_client.exceptions import (  # type: ignore[import-untyped]
+    InvokeTimeoutError,
     RateLimitExceededError,
     UnauthorizedError,
 )
@@ -87,6 +88,30 @@ class RejectingFeedBsky(FakeBsky):
         return super().get_author_feed(account)
 
 
+class FlakyFeedBsky(FakeBsky):
+    """Fails the first ``failures`` feed calls with ``error``, then succeeds."""
+
+    def __init__(self, failures: int, error: Exception) -> None:
+        super().__init__()
+        self._remaining_failures = failures
+        self._error = error
+
+    def get_author_feed(self, account: str) -> object:
+        if self._remaining_failures > 0:
+            self._remaining_failures -= 1
+            self.feed_calls += 1
+            raise self._error
+        return super().get_author_feed(account)
+
+
+class FakeSleep:
+    def __init__(self) -> None:
+        self.calls: list[float] = []
+
+    def __call__(self, seconds: float) -> None:
+        self.calls.append(seconds)
+
+
 class FakeMastodon:
     def __init__(self) -> None:
         self.run_calls = 0
@@ -107,6 +132,8 @@ def make_config(*, session_file: Path | None = None, healthcheck_file: Path | No
         session_file=session_file,
         healthcheck_file=healthcheck_file,
         healthcheck_max_failures=3,
+        retry_count=1,
+        retry_delay=5,
         version="test",
     )
 
@@ -116,12 +143,14 @@ def make_poster(
     fake_bsky: FakeBsky,
     mastodon: FakeMastodon,
     clock: FakeClock,
+    sleep: FakeSleep | None = None,
 ) -> Crossposter:
     return Crossposter(
         config,
         bsky=BlueskyClient(config, client=fake_bsky),
         mastodon=mastodon,
         clock=clock,
+        sleep=sleep if sleep is not None else FakeSleep(),
     )
 
 
@@ -144,11 +173,13 @@ def test_rate_limit_backs_off_without_logging_in_again() -> None:
     fake_bsky = FakeBsky(feed_error=error)
     mastodon = FakeMastodon()
     clock = FakeClock()
-    poster = make_poster(config, fake_bsky, mastodon, clock)
+    sleep = FakeSleep()
+    poster = make_poster(config, fake_bsky, mastodon, clock, sleep=sleep)
 
     assert not poster.run_cycle()
     assert fake_bsky.create_session_calls == 1
     assert fake_bsky.feed_calls == 1
+    assert sleep.calls == []
 
     clock.now = 60.0
     assert not poster.run_cycle()
@@ -166,9 +197,11 @@ def test_rejected_session_logs_in_again() -> None:
     response = SimpleNamespace(status_code=401, headers={}, content=None)
     fake_bsky = RejectingFeedBsky(UnauthorizedError(response))
     config = make_config()
+    sleep = FakeSleep()
 
-    assert make_poster(config, fake_bsky, FakeMastodon(), FakeClock()).run_cycle()
+    assert make_poster(config, fake_bsky, FakeMastodon(), FakeClock(), sleep=sleep).run_cycle()
     assert fake_bsky.create_session_calls == 2
+    assert sleep.calls == []
 
 
 def test_backoff_doubles_and_caps_without_retry_after() -> None:
@@ -213,6 +246,40 @@ def test_bluesky_failure_still_runs_mastodon() -> None:
 
     assert not poster.run_cycle()
     assert mastodon.run_calls == 1
+
+
+def test_transient_failure_is_retried_within_the_cycle(tmp_path: Path) -> None:
+    health_path = tmp_path / "health"
+    config = make_config(healthcheck_file=health_path)
+    fake_bsky = FlakyFeedBsky(1, InvokeTimeoutError())
+    mastodon = FakeMastodon()
+    sleep = FakeSleep()
+    poster = make_poster(config, fake_bsky, mastodon, FakeClock(), sleep=sleep)
+
+    assert poster.run_cycle()
+
+    assert fake_bsky.feed_calls == 2
+    assert fake_bsky.create_session_calls == 1
+    assert mastodon.run_calls == 1
+    assert sleep.calls == [config.retry_delay]
+    assert health_path.exists()
+
+
+def test_persistent_transient_failure_marks_cycle_failed(tmp_path: Path) -> None:
+    health_path = tmp_path / "health"
+    config = make_config(healthcheck_file=health_path)
+    fake_bsky = FakeBsky(feed_error=InvokeTimeoutError())
+    mastodon = FakeMastodon()
+    sleep = FakeSleep()
+    poster = make_poster(config, fake_bsky, mastodon, FakeClock(), sleep=sleep)
+
+    assert not poster.run_cycle()
+
+    assert fake_bsky.feed_calls == 2
+    assert fake_bsky.create_session_calls == 1
+    assert mastodon.run_calls == 1
+    assert sleep.calls == [config.retry_delay]
+    assert not health_path.exists()
 
 
 def test_healthcheck_goes_unhealthy_after_consecutive_failures(
