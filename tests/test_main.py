@@ -2,10 +2,12 @@
 #
 # SPDX-License-Identifier: MIT
 
+import logging
 import random
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
+import httpx
 from atproto_client.exceptions import (  # type: ignore[import-untyped]
     InvokeTimeoutError,
     RateLimitExceededError,
@@ -263,6 +265,33 @@ def test_transient_failure_is_retried_within_the_cycle(tmp_path: Path) -> None:
     assert mastodon.run_calls == 1
     assert sleep.calls == [config.retry_delay]
     assert health_path.exists()
+
+
+def test_retry_log_names_exception_class(caplog: pytest.LogCaptureFixture) -> None:
+    config = make_config()
+    fake_bsky = FlakyFeedBsky(1, InvokeTimeoutError())
+    poster = make_poster(config, fake_bsky, FakeMastodon(), FakeClock())
+
+    with caplog.at_level(logging.WARNING):
+        assert poster.run_cycle()
+
+    assert (
+        "Bluesky attempt 1 failed with a transient error (InvokeTimeoutError); retrying in 5 seconds" in caplog.messages
+    )
+
+
+def test_retry_log_includes_exception_message(caplog: pytest.LogCaptureFixture) -> None:
+    config = make_config()
+    fake_bsky = FlakyFeedBsky(1, httpx.ConnectError("[Errno 111] Connection refused"))
+    poster = make_poster(config, fake_bsky, FakeMastodon(), FakeClock())
+
+    with caplog.at_level(logging.WARNING):
+        assert poster.run_cycle()
+
+    assert (
+        "Bluesky attempt 1 failed with a transient error "
+        "(ConnectError: [Errno 111] Connection refused); retrying in 5 seconds" in caplog.messages
+    )
 
 
 def test_persistent_transient_failure_marks_cycle_failed(tmp_path: Path) -> None:

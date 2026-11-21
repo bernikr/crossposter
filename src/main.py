@@ -105,6 +105,17 @@ def _is_transient(error: BaseException) -> bool:
     return isinstance(error, TRANSIENT_ERRORS)
 
 
+def _format_error(error: BaseException) -> str:
+    """Name the exception class, appending its message when it has one.
+
+    Returns:
+        str: The exception type, followed by ``": <message>"`` when non-empty.
+    """
+    message = str(error)
+    name = type(error).__name__
+    return f"{name}: {message}" if message else name
+
+
 def _is_session_rejected(error: BaseException) -> bool:
     if isinstance(error, (LoginRequiredError, UnauthorizedError)):
         return True
@@ -360,7 +371,7 @@ class Crossposter:
                     "%s attempt %d failed with a transient error (%s); retrying in %d seconds",
                     name,
                     attempt,
-                    error,
+                    _format_error(error),
                     self._config.retry_delay,
                 )
                 self._sleep(self._config.retry_delay)
