@@ -5,14 +5,15 @@
 import logging
 import random
 from types import SimpleNamespace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import httpx
-from atproto_client.exceptions import (  # type: ignore[import-untyped]
+from atproto_client.exceptions import (
     InvokeTimeoutError,
     RateLimitExceededError,
     UnauthorizedError,
 )
+from atproto_client.request import Response
 
 from main import Backoff, BlueskyClient, Config, Crossposter, healthcheck
 
@@ -21,6 +22,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     import pytest
+    from atproto_client import Client
 
 
 class FakeClock:
@@ -149,7 +151,7 @@ def make_poster(
 ) -> Crossposter:
     return Crossposter(
         config,
-        bsky=BlueskyClient(config, client=fake_bsky),
+        bsky=BlueskyClient(config, client=cast("Client", fake_bsky)),
         mastodon=mastodon,
         clock=clock,
         sleep=sleep if sleep is not None else FakeSleep(),
@@ -169,7 +171,7 @@ def test_reuses_one_session_across_cycles() -> None:
 
 
 def test_rate_limit_backs_off_without_logging_in_again() -> None:
-    response = SimpleNamespace(headers={"retry-after": "120"})
+    response = Response(success=False, status_code=429, content=None, headers={"retry-after": "120"})
     error = RateLimitExceededError(response)
     config = make_config()
     fake_bsky = FakeBsky(feed_error=error)
@@ -196,7 +198,7 @@ def test_rate_limit_backs_off_without_logging_in_again() -> None:
 
 
 def test_rejected_session_logs_in_again() -> None:
-    response = SimpleNamespace(status_code=401, headers={}, content=None)
+    response = Response(success=False, status_code=401, content=None, headers={})
     fake_bsky = RejectingFeedBsky(UnauthorizedError(response))
     config = make_config()
     sleep = FakeSleep()

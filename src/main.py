@@ -11,15 +11,15 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Final, Protocol
 
 import httpx
-from atproto import Client  # type: ignore[import-untyped]
-from atproto_client.exceptions import (  # type: ignore[import-untyped]
+from atproto import Client
+from atproto_client.exceptions import (
     BadRequestError,
     LoginRequiredError,
     NetworkError,
     RateLimitExceededError,
     UnauthorizedError,
 )
-from atproto_client.request import Request  # type: ignore[import-untyped]
+from atproto_client.request import Request
 from mastodon import (
     Mastodon,
     MastodonNetworkError,
